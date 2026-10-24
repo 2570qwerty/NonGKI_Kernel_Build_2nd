@@ -136,10 +136,53 @@ jobs:
           # (2b) tzdriver: crypto_shash_descsize() is runtime -> illegal VLA in struct
           sed -i "s/char ctx\[crypto_shash_descsize(g_tee_shash_tfm)\];/char ctx[512];/" \
             drivers/hisi/tzdriver/tc_client_driver.c && echo "patched tzdriver VLA"
-          # (2c) KernelSU preinit runner needs nolibc (kernel 5.x+) -> drop those objects
+          # (2c) KernelSU preinit embeds a nolibc runner.elf that this 4.9 tree cannot
+          #      build. Dropping the objects is NOT enough: callers then reference
+          #      ksu_preinit_* with no definition. The supported switch is
+          #      KSU_NO_PREINIT, which makes preinit.h emit static-inline stubs.
           grep -rl "preinit/blob.o" drivers/kernelsu 2>/dev/null | while read -r f; do
-            sed -i "/preinit\/blob.o/d; /preinit\/preinit.o/d" "$f" && echo "dropped ksu preinit: $f"
+            sed -i "/preinit\/blob.o/d; /preinit\/preinit.o/d" "$f" && echo "dropped ksu preinit objs: $f"
           done
+          if [ -f drivers/kernelsu/Makefile ] && ! grep -q KSU_NO_PREINIT drivers/kernelsu/Makefile; then
+            echo "ccflags-y += -DKSU_NO_PREINIT" >> drivers/kernelsu/Makefile && echo "KSU_NO_PREINIT defined"
+          fi
+          # (2e) Huawei's tree dropped bcmp() and stpcpy() from lib/string.c while BCM
+          #      wifi, dm-verity, v4l2, psmouse and tty still call them -> undefined
+          #      references at the vmlinux link.
+          if ! grep -q "__HAVE_ARCH_STPCPY" lib/string.c; then
+            cat >> lib/string.c <<'KSU_EOF'
+
+          #ifndef __HAVE_ARCH_BCMP
+          int bcmp(const void *s1, const void *s2, size_t len)
+          {
+          	return memcmp(s1, s2, len);
+          }
+          EXPORT_SYMBOL(bcmp);
+          #endif
+
+          #ifndef __HAVE_ARCH_STPCPY
+          char *stpcpy(char *dest, const char *src)
+          {
+          	while ((*dest = *src) != '\0') {
+          		dest++;
+          		src++;
+          	}
+          	return dest;
+          }
+          EXPORT_SYMBOL(stpcpy);
+          #endif
+          KSU_EOF
+            echo "added bcmp/stpcpy to lib/string.c"
+          fi
+          # (2f) .builtin_fw is empty in this config -> output section alignment 1,
+          #      but fw_get_builtin_firmware() performs 8-byte loads from it:
+          #      "relocation truncated to fit: R_AARCH64_LDST64_ABS_LO12_NC".
+          if ! grep -q "__start_builtin_fw\[\] __aligned(8)" drivers/base/firmware_class.c; then
+            perl -0pi -e 's/(\.builtin_fw[ ]*: AT\(ADDR\(\.builtin_fw\)[^\n]*\n)/$1\t\t. = ALIGN(8);\t\t\t\t\t\t\\\n/' include/asm-generic/vmlinux.lds.h
+            sed -i 's/^extern struct builtin_fw __start_builtin_fw\[\];/extern struct builtin_fw __start_builtin_fw[] __aligned(8);/' drivers/base/firmware_class.c
+            sed -i 's/^extern struct builtin_fw __end_builtin_fw\[\];/extern struct builtin_fw __end_builtin_fw[] __aligned(8);/' drivers/base/firmware_class.c
+            echo "patched builtin_fw alignment"
+          fi
           # (2d) OASES inline-hook engine: its objcopy step cannot read clang objects
           #      (GNU objcopy 4.9 rejects them, llvm-objcopy segfaults) -> disable it.
           scripts/config --file arch/arm64/configs/${DEFCONFIG_NAME} -d OASES -d OASES_SIGNATURE_SUPPORT -d OASES_STATIC_PLTS || true
