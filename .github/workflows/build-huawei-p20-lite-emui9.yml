@@ -136,7 +136,7 @@ jobs:
           done
           # (3) belt and braces: newer clang promotes several pointer-type diagnostics to
           #     hard errors BY DEFAULT, and -Wno-error cannot demote those.
-          echo "KCFLAGS=-Wno-unknown-warning-option -Wno-error -Wno-everything -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion" >> $GITHUB_ENV
+          echo "KCFLAGS=-Wno-unknown-warning-option -Wno-error -w -Wno-everything -Wno-format-security -Wno-format-nonliteral -Wno-format -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion -Wno-address-of-packed-member -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-parentheses-equality -Wno-bool-operation -Wno-implicit-function-declaration -Wno-shift-negative-value -Wno-constant-conversion -Wno-implicit-int" >> $GITHUB_ENV
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
