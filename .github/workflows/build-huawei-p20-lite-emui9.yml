@@ -1,0 +1,57 @@
+name: Build Huawei P20 Lite (EMUI 9.1 / Kirin 659)
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  # Device env
+  DEVICE_NAME: "huawei_p20_lite"
+  DEVICE_CODENAME: "anne"
+
+  CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
+
+  # LineageOS hi6250 tree: Linux 4.9.148 (same major as the phone's stock kernel)
+  KERNEL_SOURCE: "https://github.com/LineageOS/android_kernel_huawei_hi6250.git"
+  KERNEL_BRANCH: "lineage-17.1"
+
+  # clang r416183b is the LineageOS prebuilt used for 4.9 kernels
+  CLANG_SOURCE: "https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git"
+  CLANG_BRANCH: "lineage-20.0"
+
+  GCC_GNU: false
+  GCC_64_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git"
+  GCC_64_BRANCH: "lineage-19.1"
+  GCC_32_SOURCE: "https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git"
+  GCC_32_BRANCH: "lineage-19.1"
+
+  DEFCONFIG_SOURCE: ""
+  DEFCONFIG_NAME: "merge_hi6250_defconfig"
+  DEFCONFIG_ORIGIN_IMAGE: ""
+  DEFCONFIG_FROM_BOOT: false
+
+  KERNELSU_SOURCE: ""
+  KERNELSU_BRANCH: ""
+
+  KERNELSU_AUTO_GET: "true"
+  KERNELSU_AUTO_FORK: "bakasu"     # xxksu, rsuntk, next, bakasu, sukisu
+
+  SUSFS_ENABLE: true
+  SUSFS_FIXED: true
+
+  AK3_SOURCE: "https://github.com/osm0sis/AnyKernel3.git"
+  AK3_BRANCH: "master"
+
+  BOOT_SOURCE: ""
+  NEED_DTBO: false
+  NEED_SAFE_DTBO: false
+
+  ROM_TEXT: "emui9_1_a9"
+
+  # Other env
+  PYTHON_VERSION: "3"
+  PACK_METHOD: "AnyKernel3"        # we extract the Image from the zip and repack for Huawei
+  PACK_KMODULES: "true"            # keep .ko modules so wifi/etc. match the new vermagic
+  KERNELSU_METHOD: "shell"
+  PATCHES_SOURCE: ""
