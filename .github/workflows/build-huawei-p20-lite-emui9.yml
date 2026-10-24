@@ -10,7 +10,7 @@ env:
   DEVICE_CODENAME: "anne"
 
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "OBJCOPY=objcopy LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
+  EXTRA_CMDS: "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
 
   KERNEL_SOURCE: "https://github.com/LineageOS/android_kernel_huawei_hi6250.git"
   KERNEL_BRANCH: "lineage-17.1"
@@ -116,12 +116,11 @@ jobs:
       - name: 🪛 Extra Kernel Options
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
-          # (1) GCC>=10 defaults to -fno-common -> breaks 4.9 host tools (dtc: multiple definition of yylloc)
+          # (1) GCC>=10 defaults to -fno-common -> breaks 4.9 host tools (dtc: yylloc)
           grep -q "HOSTCFLAGS += -fcommon" Makefile || echo "HOSTCFLAGS += -fcommon" >> Makefile
           sed -i "s/^YYLTYPE yylloc;/extern YYLTYPE yylloc;/" scripts/dtc/dtc-lexer.lex.c 2>/dev/null || true
-          # (2) vendor drivers force -Werror (with GCC-only flags) through EXTRA_CFLAGS /
-          #     subdir-ccflags-y, which lands AFTER KBUILD_CFLAGS and beats any global -Wno-error.
-          #     Strip only the standalone token; -Werror=<opt> guards stay intact.
+          # (2) vendor drivers force -Werror (with GCC-only flags) via EXTRA_CFLAGS /
+          #     subdir-ccflags-y, which lands AFTER KBUILD_CFLAGS and beats -Wno-error.
           for f in sound/usb/hifi/Makefile \
                    drivers/connectivity/hisi/platform/Makefile \
                    drivers/connectivity/hisi/wifi/Makefile \
@@ -134,16 +133,20 @@ jobs:
               sed -i -E "s/(^|[[:space:]])-Werror([[:space:]]|$)/\1\2/g" "$f" && echo "stripped -Werror: $f"
             fi
           done
-          # (2b) tzdriver: crypto_shash_descsize() is a runtime value -> illegal VLA in struct
+          # (2b) tzdriver: crypto_shash_descsize() is runtime -> illegal VLA in struct
           sed -i "s/char ctx\[crypto_shash_descsize(g_tee_shash_tfm)\];/char ctx[512];/" \
             drivers/hisi/tzdriver/tc_client_driver.c && echo "patched tzdriver VLA"
           # (2c) KernelSU preinit runner needs nolibc (kernel 5.x+) -> drop those objects
           grep -rl "preinit/blob.o" drivers/kernelsu 2>/dev/null | while read -r f; do
             sed -i "/preinit\/blob.o/d; /preinit\/preinit.o/d" "$f" && echo "dropped ksu preinit: $f"
           done
-          # (3) belt and braces: newer clang promotes several pointer-type diagnostics to
-          #     hard errors BY DEFAULT, and -Wno-error cannot demote those.
-          echo "KCFLAGS=-Wno-unknown-warning-option -Wno-error -w -Wno-everything -Wno-format-security -Wno-format-nonliteral -Wno-format -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion -Wno-address-of-packed-member -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-parentheses-equality -Wno-bool-operation -Wno-implicit-function-declaration -Wno-shift-negative-value -Wno-constant-conversion -Wno-implicit-int" >> $GITHUB_ENV
+          # (2d) OASES inline-hook engine: its objcopy step cannot read clang objects
+          #      (GNU objcopy 4.9 rejects them, llvm-objcopy segfaults) -> disable it.
+          scripts/config --file arch/arm64/configs/${DEFCONFIG_NAME} -d OASES -d OASES_SIGNATURE_SUPPORT -d OASES_STATIC_PLTS || true
+          echo "OASES disabled"
+          # (3) newer clang promotes several pointer-type diagnostics to hard errors BY
+          #     DEFAULT, which -Wno-error cannot demote.
+          echo "KCFLAGS=-Wno-unknown-warning-option -Wno-error -w -Wno-everything -Wno-format-security -Wno-format-nonliteral -Wno-format -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion -Wno-address-of-packed-member -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-parentheses-equality -Wno-bool-operation -Wno-implicit-function-declaration -Wno-shift-negative-value -Wno-constant-conversion" >> $GITHUB_ENV
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
