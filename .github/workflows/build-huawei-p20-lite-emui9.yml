@@ -116,13 +116,26 @@ jobs:
       - name: 🪛 Extra Kernel Options
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
-          # (1) GCC>=10 defaults to -fno-common, which breaks 4.9 host tools (dtc: multiple definition of yylloc)
+          # (1) GCC>=10 defaults to -fno-common -> breaks 4.9 host tools (dtc: multiple definition of yylloc)
           grep -q "HOSTCFLAGS += -fcommon" Makefile || echo "HOSTCFLAGS += -fcommon" >> Makefile
           sed -i "s/^YYLTYPE yylloc;/extern YYLTYPE yylloc;/" scripts/dtc/dtc-lexer.lex.c 2>/dev/null || true
-          # (2) old Kirin code + newer clang: -Werror turns ordinary warnings into hard errors
-          scripts/config --file arch/arm64/configs/${DEFCONFIG_NAME} -d WERROR || true
-          # KCFLAGS is appended last by kbuild, so it wins over per-driver -Werror
-          echo "KCFLAGS=-Wno-error -Wno-unknown-warning-option -Wno-pointer-bool-conversion" >> $GITHUB_ENV
+          # (2) vendor drivers force -Werror (with GCC-only flags) through EXTRA_CFLAGS /
+          #     subdir-ccflags-y, which lands AFTER KBUILD_CFLAGS and beats any global -Wno-error.
+          #     Strip only the standalone token; -Werror=<opt> guards stay intact.
+          for f in sound/usb/hifi/Makefile \
+                   drivers/connectivity/hisi/platform/Makefile \
+                   drivers/connectivity/hisi/wifi/Makefile \
+                   drivers/connectivity/hi11xx/hi1102a/platform/Makefile \
+                   drivers/connectivity/hi11xx/hi1102a/wifi/Makefile \
+                   drivers/connectivity/hi11xx/hi1103/platform/Makefile \
+                   drivers/connectivity/hi11xx/hi1103/wifi/1103/Makefile \
+                   drivers/cfi/Makefile ; do
+            if [ -f "$f" ]; then
+              sed -i -E "s/(^|[[:space:]])-Werror([[:space:]]|$)/\1\2/g" "$f" && echo "stripped -Werror: $f"
+            fi
+          done
+          # (3) belt and braces
+          echo "KCFLAGS=-Wno-error -Wno-unknown-warning-option" >> $GITHUB_ENV
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
