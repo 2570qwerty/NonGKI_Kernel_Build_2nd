@@ -10,7 +10,7 @@ env:
   DEVICE_CODENAME: "anne"
 
   CUSTOM_CMDS: "CLANG_TRIPLE=aarch64-linux-gnu-"
-  EXTRA_CMDS: "OBJCOPY=llvm-objcopy LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
+  EXTRA_CMDS: "OBJCOPY=objcopy LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib64"
 
   KERNEL_SOURCE: "https://github.com/LineageOS/android_kernel_huawei_hi6250.git"
   KERNEL_BRANCH: "lineage-17.1"
