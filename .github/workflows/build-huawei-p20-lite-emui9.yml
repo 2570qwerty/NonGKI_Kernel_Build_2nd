@@ -116,9 +116,13 @@ jobs:
       - name: 🪛 Extra Kernel Options
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
-          # GCC>=10 defaults to -fno-common, which breaks 4.9 host tools (dtc: multiple definition of yylloc)
+          # (1) GCC>=10 defaults to -fno-common, which breaks 4.9 host tools (dtc: multiple definition of yylloc)
           grep -q "HOSTCFLAGS += -fcommon" Makefile || echo "HOSTCFLAGS += -fcommon" >> Makefile
           sed -i "s/^YYLTYPE yylloc;/extern YYLTYPE yylloc;/" scripts/dtc/dtc-lexer.lex.c 2>/dev/null || true
+          # (2) old Kirin code + newer clang: -Werror turns ordinary warnings into hard errors
+          scripts/config --file arch/arm64/configs/${DEFCONFIG_NAME} -d WERROR || true
+          # KCFLAGS is appended last by kbuild, so it wins over per-driver -Werror
+          echo "KCFLAGS=-Wno-error -Wno-unknown-warning-option -Wno-pointer-bool-conversion" >> $GITHUB_ENV
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
