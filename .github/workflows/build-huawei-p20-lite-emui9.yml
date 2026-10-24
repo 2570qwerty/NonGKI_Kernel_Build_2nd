@@ -134,8 +134,9 @@ jobs:
               sed -i -E "s/(^|[[:space:]])-Werror([[:space:]]|$)/\1\2/g" "$f" && echo "stripped -Werror: $f"
             fi
           done
-          # (3) belt and braces
-          echo "KCFLAGS=-Wno-error -Wno-unknown-warning-option" >> $GITHUB_ENV
+          # (3) belt and braces: newer clang promotes several pointer-type diagnostics to
+          #     hard errors BY DEFAULT, and -Wno-error cannot demote those.
+          echo "KCFLAGS=-Wno-unknown-warning-option -Wno-error -Wno-everything -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion" >> $GITHUB_ENV
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
