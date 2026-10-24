@@ -136,16 +136,20 @@ jobs:
           # (2b) tzdriver: crypto_shash_descsize() is runtime -> illegal VLA in struct
           sed -i "s/char ctx\[crypto_shash_descsize(g_tee_shash_tfm)\];/char ctx[512];/" \
             drivers/hisi/tzdriver/tc_client_driver.c && echo "patched tzdriver VLA"
-          # (2c) KernelSU preinit embeds a nolibc runner.elf that this 4.9 tree cannot
-          #      build. Dropping the objects is NOT enough: callers then reference
-          #      ksu_preinit_* with no definition. The supported switch is
-          #      KSU_NO_PREINIT, which makes preinit.h emit static-inline stubs.
+          # (2c) KernelSU preinit embeds a nolibc runner.elf that this 4.9 tree
+          #      cannot build, so its objects are dropped. That alone leaves the
+          #      callers referencing ksu_preinit_* with no definition, so the
+          #      supported KSU_NO_PREINIT switch must be defined as well
+          #      (preinit.h then emits static-inline stubs).
+          #      In-tree builds use Kbuild (it wins over Makefile).
           grep -rl "preinit/blob.o" drivers/kernelsu 2>/dev/null | while read -r f; do
             sed -i "/preinit\/blob.o/d; /preinit\/preinit.o/d" "$f" && echo "dropped ksu preinit objs: $f"
           done
-          if [ -f drivers/kernelsu/Makefile ] && ! grep -q KSU_NO_PREINIT drivers/kernelsu/Makefile; then
-            echo "ccflags-y += -DKSU_NO_PREINIT" >> drivers/kernelsu/Makefile && echo "KSU_NO_PREINIT defined"
-          fi
+          for mk in drivers/kernelsu/Kbuild drivers/kernelsu/Makefile; do
+            if [ -f "$mk" ] && ! grep -q KSU_NO_PREINIT "$mk"; then
+              echo "ccflags-y += -DKSU_NO_PREINIT" >> "$mk" && echo "KSU_NO_PREINIT defined in $mk"
+            fi
+          done
           # (2e) Huawei's tree dropped bcmp() and stpcpy() from lib/string.c while BCM
           #      wifi, dm-verity, v4l2, psmouse and tty still call them -> undefined
           #      references at the vmlinux link.
@@ -189,7 +193,7 @@ jobs:
           echo "OASES disabled"
           # (3) newer clang promotes several pointer-type diagnostics to hard errors BY
           #     DEFAULT, which -Wno-error cannot demote.
-          echo "KCFLAGS=-Wno-unknown-warning-option -Wno-error -w -Wno-everything -Wno-format-security -Wno-format-nonliteral -Wno-format -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion -Wno-address-of-packed-member -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-parentheses-equality -Wno-bool-operation -Wno-implicit-function-declaration -Wno-shift-negative-value -Wno-constant-conversion" >> $GITHUB_ENV
+          echo "KCFLAGS=-DKSU_NO_PREINIT -Wno-unknown-warning-option -Wno-error -w -Wno-everything -Wno-format-security -Wno-format-nonliteral -Wno-format -Wno-incompatible-pointer-types-discards-qualifiers -Wno-incompatible-pointer-types -Wno-incompatible-function-pointer-types -Wno-int-conversion -Wno-tautological-unsigned-enum-zero-compare -Wno-non-literal-null-conversion -Wno-address-of-packed-member -Wno-misleading-indentation -Wno-unused-but-set-variable -Wno-parentheses-equality -Wno-bool-operation -Wno-implicit-function-declaration -Wno-shift-negative-value -Wno-constant-conversion" >> $GITHUB_ENV
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
